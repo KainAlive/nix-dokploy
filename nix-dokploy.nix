@@ -187,10 +187,13 @@ in {
         ExecStart = let
           script = pkgs.writeShellApplication {
             name = "dokploy-stack-start";
-            runtimeInputs = [pkgs.curl pkgs.docker pkgs.hostname pkgs.gawk] ++
-              (if cfg.swarm.advertiseAddress ? extraPackages
-               then cfg.swarm.advertiseAddress.extraPackages
-               else []);
+            runtimeInputs =
+              [pkgs.curl pkgs.docker pkgs.hostname pkgs.gawk]
+              ++ (
+                if cfg.swarm.advertiseAddress ? extraPackages
+                then cfg.swarm.advertiseAddress.extraPackages
+                else []
+              );
             text = ''
               # Get advertise address based on configuration
               ${
@@ -217,18 +220,21 @@ in {
                 exit 1
               fi
 
-              # Check current swarm state
               swarm_active=$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || echo "inactive")
-              current_addr=$(docker info --format '{{.Swarm.NodeAddr}}' 2>/dev/null || echo "")
-
               # Leave swarm if auto-recreate is enabled and address changed
-              ${if cfg.swarm.autoRecreate then ''
-                if [[ "$swarm_active" == "active" ]] && [[ "$current_addr" != "$advertise_addr" ]]; then
-                  echo "Advertise address changed ($current_addr -> $advertise_addr), recreating swarm..."
-                  docker swarm leave --force
-                  swarm_active="inactive"
-                fi
-              '' else ""}
+              ${
+                if cfg.swarm.autoRecreate
+                then ''
+                  # Check current swarm state
+                  current_addr=$(docker info --format '{{.Swarm.NodeAddr}}' 2>/dev/null || echo "")
+                  if [[ "$swarm_active" == "active" ]] && [[ "$current_addr" != "$advertise_addr" ]]; then
+                    echo "Advertise address changed ($current_addr -> $advertise_addr), recreating swarm..."
+                    docker swarm leave --force
+                    swarm_active="inactive"
+                  fi
+                ''
+                else ""
+              }
 
               # Initialize swarm if inactive
               if [[ "$swarm_active" != "active" ]]; then
